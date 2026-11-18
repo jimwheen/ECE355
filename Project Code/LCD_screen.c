@@ -763,7 +763,7 @@ void myGPIOB_Init( void )
 	/* Ensure no pull-up/pull-down for PB8, PB9, PB11, PB13 and PB15 */
 	GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR8 | GPIO_PUPDR_PUPDR9 | GPIO_PUPDR_PUPDR11 | GPIO_PUPDR_PUPDR13 | GPIO_PUPDR_PUPDR15);
 
-	//AF0, learn how this works
+	//lets you pick the specific peripheral, SPI2 and data lines to pins 13 and 15
 	GPIOB->AFR[1] &= ~(GPIO_AFRH_AFSEL13);
 	GPIOB->AFR[1] &= ~(GPIO_AFRH_AFSEL15);
 }
