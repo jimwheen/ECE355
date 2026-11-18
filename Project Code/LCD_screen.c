@@ -687,8 +687,8 @@ void refresh_OLED( void )
         		oled_Write_Data(Characters[c][col]);
         		current_col++;
     	}
-    delay(100);
     }
+	delay(100);
 }
 
 
