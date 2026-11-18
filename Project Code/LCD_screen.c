@@ -19,71 +19,6 @@
 #include "cmsis/cmsis_device.h"
 
 
-// ----------------------------------------------------------------------------
-
-//
-
-// STM32F0 led blink sample (trace via $(trace)).
-
-//
-
-// In debug configurations, demonstrate how to print a greeting message
-
-// on the trace device. In release configurations the message is
-
-// simply discarded.
-
-//
-
-// To demonstrate POSIX retargetting, reroute the STDOUT and STDERR to the
-
-// trace device and display messages on both of them.
-
-//
-
-// Then demonstrates how to blink a led with 1Hz, using a
-
-// continuous loop and SysTick delays.
-
-//
-
-// On DEBUG, the uptime in seconds is also displayed on the trace device.
-
-//
-
-// Trace support is enabled by adding the TRACE macro definition.
-
-// By default the trace messages are forwarded to the $(trace) output,
-
-// but can be rerouted to any device or completely suppressed, by
-
-// changing the definitions required in system/src/diag/trace_impl.c
-
-// (currently OS_USE_TRACE_ITM, OS_USE_TRACE_SEMIHOSTING_DEBUG/_STDOUT).
-
-//
-
-// The external clock frequency is specified as a preprocessor definition
-
-// passed to the compiler via a command line option (see the 'C/C++ General' ->
-
-// 'Paths and Symbols' -> the 'Symbols' tab, if you want to change it).
-
-// The value selected during project creation was HSE_VALUE=48000000.
-
-//
-
-/// Note: The default clock settings take the user defined HSE_VALUE and try
-
-// to reach the maximum possible system clock. For the default 8MHz input
-
-// the result is guaranteed, but for other values it might not be possible,
-
-// so please adjust the PLL settings in system/src/cmsis/system_stm32f0xx.c
-
-//
-
-
 
 // ----- main() ---------------------------------------------------------------
 
@@ -102,9 +37,7 @@
 
 
 
-/*** This is partial code for accessing LED Display via SPI interface. ***/
-
-
+/*** This is code for accessing LED Display via SPI interface. ***/
 
 
 
@@ -114,8 +47,9 @@ unsigned int Res = 100;   // Example: measured resistance value (global variable
 
 
 
-/* Clock prescaler for TIM3 timer: This makes it so 1 = 1ms in delay func I believe */
+/* Clock prescaler for TIM3 timer: This makes it so 1 = 1ms. 48Mhz cpu clock / 48 000 - 1 = 1,000 ticks per second (-1 for 0 indexing) */
 #define myTIM3_PRESCALER ((uint16_t)47999)
+
 /* Initial delay count for TIM3 timer, max value so delay is never bigger than overflow*/
 #define myTIM3_PERIOD ((uint32_t)0xFFFF)
 
@@ -131,7 +65,9 @@ void oled_config(void);
 
 void refresh_OLED(void);
 
-void delay(uint32_t delayMS);
+
+
+void delay(uint32_t);
 
 void myGPIOB_Init( void );
 
@@ -476,65 +412,47 @@ void SystemClock48MHz( void )
 {
 
 //
-
 // Disable the PLL
-
 //
 
     RCC->CR &= ~(RCC_CR_PLLON);
 
 //
-
 // Wait for the PLL to unlock
-
 //
 
     while (( RCC->CR & RCC_CR_PLLRDY ) != 0 );
 
 //
-
 // Configure the PLL for a 48MHz system clock
-
 //
 
     RCC->CFGR = 0x00280000;
 
-
 //
-
 // Enable the PLL
-
 //
 
     RCC->CR |= RCC_CR_PLLON;
 
 
 //
-
 // Wait for the PLL to lock
-
 //
 
     while (( RCC->CR & RCC_CR_PLLRDY ) != RCC_CR_PLLRDY );
 
-
 //
-
 // Switch the processor to the PLL clock source
-
 //
 
     RCC->CFGR = ( RCC->CFGR & (~RCC_CFGR_SW_Msk)) | RCC_CFGR_SW_PLL;
 
-
 //
-
 // Update the system with the new clock frequency
-
 //
 
     SystemCoreClockUpdate();
-
 
 }
 
@@ -544,17 +462,15 @@ void SystemClock48MHz( void )
 int main(int argc, char* argv[])
 
 {
-
-	SystemClock48MHz();
-	myTIM3_Init();
-	myGPIOB_Init();
-	oled_config();
-
+	SystemClock48MHz(); /* Speed up System Clock to 48Mhz */
+	myTIM3_Init(); 	/* Initialize TIM3 */
+	myGPIOB_Init(); /* Initialize GPIOB */
+	oled_config();	/* Initialize OLED Configurations */
 
 	while (1)
 
 	{
-		refresh_OLED();
+		refresh_OLED(); /* Refresh Screen continuously */
 
 	}
 
@@ -563,10 +479,9 @@ int main(int argc, char* argv[])
 
 
 
+
 //
-
 // TIM3 Delay Functions
-
 //
 
 void myTIM3_Init( void )
@@ -575,12 +490,13 @@ void myTIM3_Init( void )
 	RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
 
 	/* Configure TIM3: buffer auto-reload, count up, stop on overflow,
-	 * enable update events, interrupt on overflow only */
+	 * enable update events, no interrupts */
 	TIM3->CR1 = ((uint16_t)0x008C);
 
-	/* Set clock prescaler value */
+	/* Set clock pre-scaler value (this is to make 1 clock = 1ms) */
 	TIM3->PSC = myTIM3_PRESCALER;
-	/* Set auto-reloaded delay */
+
+	/* Set auto-reloaded delay (Set to max possible value so we wont reload before delay)*/
 	TIM3->ARR = myTIM3_PERIOD;
 
 	/* Update timer registers */
@@ -590,52 +506,71 @@ void myTIM3_Init( void )
 
 void delay(uint32_t delayMS)
 {
-	/* Stop timer just in case*/
+	/* Stop timer */
 	TIM3->CR1 &= ~(TIM_CR1_CEN);
 
 	/* Reset timer count to 0 */
 	TIM3 -> CNT = 0;
 
-	/* Start counting timer pulses */
+	/* Start counting timer pulses (1ms increments) */
 	TIM3->CR1 |= TIM_CR1_CEN;
 
 	/*Wait until delay is reached*/
 	while(TIM3->CNT<delayMS);
 
-	/* Stop timer just in case*/
+	/* Stop timer*/
 	TIM3->CR1 &= ~(TIM_CR1_CEN);
 }
-//
 
+
+
+//
 // LED Display Functions
-
 //
-
-
-
 
 void refresh_OLED( void )
 
 {
 
     // Buffer size = at most 16 characters per PAGE + terminating '\0'
-
     unsigned char Buffer[17];
 
 
-    snprintf( Buffer, sizeof( Buffer ), "R: %5u Ohms", Res );
+    /* Put the character ASCII codes for the LED Display into the Buffer */
+    snprintf( Buffer, sizeof( Buffer ), "Example Values:");
 
-    /* Buffer now contains your character ASCII codes for LED Display
 
-       - select PAGE (LED Display line) and set starting SEG (column)
+    /*
+           - for each c = ASCII code = Buffer[0], Buffer[1], ...,
+             send 8 bytes in Characters[c][0-7] to LED Display
 
-       - for each c = ASCII code = Buffer[0], Buffer[1], ...,
+     */
 
-           send 8 bytes in Characters[c][0-7] to LED Display
+    /* Select page 0 (ie display row 0)*/
+    oled_Write_Cmd(0xB0);
 
-    */
-    oled_Write_Cmd(0xB0); //PAGE 0 - 555 Timer
+    /* Select starting SEG (column) */
     int current_col = 5;
+
+    /* Look through the buffer until we hit the \0 */
+    for( int i=0; Buffer[i] != '\0'; i++)
+    {
+    	/* Pull the int value of the character in ASCII form */
+        unsigned int c = Buffer[i];
+
+        /* Draw the character on the LCD display */
+        for ( int col = 0; col < 8; col++)
+        {
+            	oled_Write_Cmd(0x00 | (current_col & 0x0F));
+            	oled_Write_Cmd(0x10 | (current_col >> 4 & 0x0F));
+            	oled_Write_Data(Characters[c][col]);
+            	current_col++;
+        }
+    }
+
+    oled_Write_Cmd(0xB2);
+    snprintf( Buffer, sizeof( Buffer ), "R: %5u Ohms", Res );
+    current_col = 5;
     for( int i=0; Buffer[i] != '\0'; i++)
     {
     	unsigned int c = Buffer[i];
@@ -652,27 +587,7 @@ void refresh_OLED( void )
 
 
     snprintf( Buffer, sizeof( Buffer ), "F: %5u Hz", Freq );
-
-    /* Buffer now contains your character ASCII codes for LED Display
-
-       - select PAGE (LED Display line) and set starting SEG (column)
-
-       - for each c = ASCII code = Buffer[0], Buffer[1], ...,
-
-           send 8 bytes in Characters[c][0-7] to LED Display
-
-    */
-
-    //TO DO
-
-
-
-	/* Wait for ~100 ms (for example) to get ~10 frames/sec refresh rate
-
-       - You should use TIM3 to implement this delay (e.g., via polling)
-
-    */
-    oled_Write_Cmd(0xB1); //PAGE 2 - pot
+    oled_Write_Cmd(0xB3);
     current_col = 5;
     for( int i=0; Buffer[i] != '\0'; i++)
     {
@@ -685,44 +600,52 @@ void refresh_OLED( void )
         		oled_Write_Data(Characters[c][col]);
         		current_col++;
     	}
+
+    /* Wait for ~100 ms (for example) to get ~10 frames/sec refresh rate
+
+  	  - Used TIM3 to implement this delay (via polling)
+
+   	*/
     }
-	delay(100);
+    delay(100);
 }
 
 
 void oled_Write_Cmd( unsigned char cmd )
 {
 
-     // make PB8 = CS# = 1
+     /* make PB8 = CS# = 1 : CS# = Active low Chip Select, setting high makes this device disabled on the bus */
 	GPIOB->BSRR = GPIO_BSRR_BS_8;
 
-	// make PB9 = D/C# = 0
+	/* make PB9 = D/C# = 0 : DS# = Active low Data/Command, tells peripheral if incoming stuff is command (0) or data (1) */
 	GPIOB->BSRR = GPIO_BSRR_BR_9;
 
-	// make PB8 = CS# = 0
+	/* make PB8 = CS# = 0: ie now active on bus */
 	GPIOB->BSRR = GPIO_BSRR_BR_8;
 
+	/* send the command info */
 	oled_Write( cmd );
 
-    // make PB8 = CS# = 1
+    /* make PB8 = CS# = 1 : Disable device on bus */
     GPIOB->BSRR = GPIO_BSRR_BS_8;
 }
 
 
 void oled_Write_Data( unsigned char data )
 {
-     // make PB8 = CS# = 1
+     /* make PB8 = CS# = 1 : CS# = Active low Chip Select, setting high makes this device disabled on the bus */
 	GPIOB->BSRR = GPIO_BSRR_BS_8;
 
-	// make PB9 = D/C# = 1
+	/* make PB9 = D/C# = 1 : DS = Data/Command, tells peripheral if incoming stuff is command (0) or data (1) */
 	GPIOB->BSRR = GPIO_BSRR_BS_9;
 
-	// make PB8 = CS# = 0
+	/* make PB8 = CS# = 0 : ie now active on bus */
 	GPIOB->BSRR = GPIO_BSRR_BR_8;
 
+	/* send the data info */
 	oled_Write( data );
 
-    // make PB8 = CS# = 1
+    /* make PB8 = CS# = 1 : Disable device on bus*/
 	GPIOB->BSRR = GPIO_BSRR_BS_8;
 }
 
@@ -749,6 +672,7 @@ void myGPIOB_Init( void )
 	/* Enable clock for GPIOC peripheral */
 	RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
 
+	/* Clear all of the MODER registers*/
 	GPIOB->MODER &= ~(GPIO_MODER_MODER8 | GPIO_MODER_MODER9 | GPIO_MODER_MODER11 | GPIO_MODER_MODER13 | GPIO_MODER_MODER15);
 
 	/* Configure PB8, PB9 and PB11 as outputs & PB13 and PB15 as Alternate Functions*/
@@ -757,13 +681,13 @@ void myGPIOB_Init( void )
 	/* Ensure push-pull mode selected for PB8, PB9, PB11, PB13 and PB15 */
 	GPIOB->OTYPER &= ~(GPIO_OTYPER_OT_8 | GPIO_OTYPER_OT_9 | GPIO_OTYPER_OT_11 | GPIO_OTYPER_OT_13 | GPIO_OTYPER_OT_15);
 
-	/* Ensure high-speed mode for PB8, PB9, PB11, PB13 and PB15 */
+	/* Setting high-speed mode for PB8, PB9, PB11, PB13 and PB15 : ie setting the speed register to 11*/
 	GPIOB->OSPEEDR |= (GPIO_OSPEEDER_OSPEEDR8 | GPIO_OSPEEDER_OSPEEDR9 | GPIO_OSPEEDER_OSPEEDR11 | GPIO_OSPEEDER_OSPEEDR13 | GPIO_OSPEEDER_OSPEEDR15);
 
 	/* Ensure no pull-up/pull-down for PB8, PB9, PB11, PB13 and PB15 */
 	GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR8 | GPIO_PUPDR_PUPDR9 | GPIO_PUPDR_PUPDR11 | GPIO_PUPDR_PUPDR13 | GPIO_PUPDR_PUPDR15);
 
-	//lets you pick the specific peripheral, SPI2 and data lines to pins 13 and 15
+	//Pins 8-15 use the high register (AFR[1]), then it is set to 0, the basic value
 	GPIOB->AFR[1] &= ~(GPIO_AFRH_AFSEL13);
 	GPIOB->AFR[1] &= ~(GPIO_AFRH_AFSEL15);
 }
@@ -817,33 +741,17 @@ void oled_config( void )
 //
     __HAL_SPI_ENABLE( &SPI_Handle );
 
+    /* Reset LED Display (RES# = PB11): RES# = Active Low Reset, setting to 0 resets the display */
+    GPIOB->BSRR = GPIO_BSRR_BR_11;
 
+    /* Delay here to let the system fully reset */
+    delay(10);
 
-    /* Reset LED Display (RES# = PB11):
+    /* Re-enable the system */
+    GPIOB->BSRR = GPIO_BSRR_BS_11; // setting the BSRR to 1
 
-       - make pin PB11 = 0, wait for a few ms
-
-       */
-
-       GPIOB->BSRR = GPIO_BSRR_BR_11; // setting the BSRR to 0
-       delay(10);
-
-       /*
-
-       - make pin PB11 = 1, wait for a few ms
-
-       */
-
-       GPIOB->BSRR = GPIO_BSRR_BS_11; // setting the BSRR to 1
-       delay(10);
-
-
-
-
-
-
-
-
+    /* Delay to fully initialize after reset */
+    delay(10);
 
 
 
